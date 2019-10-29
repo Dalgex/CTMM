@@ -18,7 +18,7 @@ class Form(wx.Frame):
         self._canvas = None
         self._max_coord = 0.0
         ctrl_size = (35, -1)
-        value = 10
+        value = 1
         self._is_calculated = False
         self._is_solar_mode = False
         self._emitter = Emitter([value, value], [value, value])
@@ -32,7 +32,7 @@ class Form(wx.Frame):
         self._panel.SetSizer(self._panel_sizer)
         self._panel_sizer.Fit(self)
         self.Show()
-        self.animation = FuncAnimation(self._canvas.figure, self._update_canvas, interval=100)
+        self.animation = FuncAnimation(self._canvas.figure, self._update_canvas, interval=500)
 
     def _init_emitter_block(self, ctrl_size, value):
         static_box = wx.StaticBox(self._panel, label="Emitter")
@@ -42,13 +42,13 @@ class Form(wx.Frame):
         text = wx.StaticText(self._panel, label="X coord")
         temp_sizer.Add(text, pos=(0, 0), flag=wx.ALIGN_CENTER | wx.ALL, border=2)
         num_ctrl = NumCtrl(self._panel, size=ctrl_size, autoSize=False, style=wx.TE_CENTER,
-                           value=value, min=1, max=50, integerWidth=2, limitOnFieldChange=True)
+                           value=value, min=0, max=99, integerWidth=2, limitOnFieldChange=True)
         self._widgets['x_coord'] = num_ctrl
         temp_sizer.Add(num_ctrl, pos=(0, 1), flag=wx.ALIGN_CENTER | wx.ALL, border=2)
         text = wx.StaticText(self._panel, label=" Y coord")
         temp_sizer.Add(text, pos=(0, 2), flag=wx.ALIGN_CENTER | wx.ALL, border=2)
         num_ctrl = NumCtrl(self._panel, size=ctrl_size, autoSize=False, style=wx.TE_CENTER,
-                           value=value, min=1, max=50, integerWidth=2, limitOnFieldChange=True)
+                           value=value, min=0, max=99, integerWidth=2, limitOnFieldChange=True)
         self._widgets['y_coord'] = num_ctrl
         temp_sizer.Add(num_ctrl, pos=(0, 3), flag=wx.ALIGN_CENTER | wx.ALL, border=2)
 
@@ -84,13 +84,13 @@ class Form(wx.Frame):
         text = wx.StaticText(self._panel, label="U speed")
         temp_sizer.Add(text, pos=(0, 0), flag=wx.ALIGN_CENTER | wx.ALL, border=2)
         num_ctrl = NumCtrl(self._panel, size=ctrl_size, autoSize=False, style=wx.TE_CENTER,
-                           value=value, min=1, max=10, integerWidth=2, limitOnFieldChange=True)
+                           value=value, min=1, max=99, integerWidth=2, limitOnFieldChange=True)
         self._widgets['u_speed'] = num_ctrl
         temp_sizer.Add(num_ctrl, pos=(0, 1), flag=wx.ALIGN_CENTER | wx.ALL, border=2)
         text = wx.StaticText(self._panel, label="V speed")
         temp_sizer.Add(text, pos=(0, 2), flag=wx.ALIGN_CENTER | wx.ALL, border=2)
         num_ctrl = NumCtrl(self._panel, size=ctrl_size, autoSize=False, style=wx.TE_CENTER,
-                           value=value, min=1, max=10, integerWidth=2, limitOnFieldChange=True)
+                           value=value, min=1, max=99, integerWidth=2, limitOnFieldChange=True)
         self._widgets['v_speed'] = num_ctrl
         temp_sizer.Add(num_ctrl, pos=(0, 3), flag=wx.ALIGN_CENTER | wx.ALL, border=2)
 
@@ -105,7 +105,7 @@ class Form(wx.Frame):
         text = wx.StaticText(self._panel, label="Lifetime")
         temp_sizer.Add(text, pos=(1, 2), flag=wx.ALIGN_CENTER | wx.ALL, border=2)
         num_ctrl = NumCtrl(self._panel, size=ctrl_size, autoSize=False, style=wx.TE_CENTER,
-                           value=value, min=10, max=50, integerWidth=2, limitOnFieldChange=True)
+                           value=50, min=10, max=100, integerWidth=3, limitOnFieldChange=True)
         self._widgets['life_time'] = num_ctrl
         temp_sizer.Add(num_ctrl, pos=(1, 3), flag=wx.ALIGN_CENTER | wx.ALL, border=2)
 
@@ -195,9 +195,12 @@ class Form(wx.Frame):
 
     def _on_random_particle_generation_click(self, event):
         self._clear()
+        self._is_solar_mode = False
         widget = self._widgets['random_generation']
         value = widget.GetValue()
         self._emitter.generate_particles(value)
+        self._max_coord = self._emitter.max_coord
+        self._is_calculated = True
 
     def _on_single_particle_generation_click(self, event):
         if self._is_solar_mode:
