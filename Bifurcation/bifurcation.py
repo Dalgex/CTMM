@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.integrate import odeint
 from sympy import symbols, Matrix, solve, lambdify
 
 x, y, k_3, k_1, k1, k2, k3 = symbols('x y k_3 k_1 k1 k2 k3')
@@ -18,7 +19,8 @@ def set_variable_values(x_array, y_array):
     return x_values, y_values
 
 
-def perform_one_param_analysis(f1, f2, param_dict, variable_param):
+def perform_one_param_analysis(f1, f2, param_dict,
+                               variable_param, updated_param):
     matrix = Matrix([f1, f2])
     variables = Matrix([x, y])
     jacobian = matrix.jacobian(variables)
@@ -69,20 +71,22 @@ def perform_one_param_analysis(f1, f2, param_dict, variable_param):
 
     if hopf_points:
         x_axis, y_axis = np.transpose(hopf_points)
-        plt.plot(x_axis, y_axis, 'ro', label='hopf point')
+        plt.plot(x_axis, y_axis, 'ro', label='Hopf point')
     if saddle_points:
         x_axis, y_axis = np.transpose(saddle_points)
-        plt.plot(x_axis, y_axis, 'go', label='saddle point')
+        plt.plot(x_axis, y_axis, 'go', label='Saddle point')
 
     plt.xlabel(f'{variable_param}')
     plt.ylabel('x, y')
     plt.xlim(-0.05, 0.2)
+    param_str = f'{updated_param} = {param_dict[updated_param]}'
+    plt.title('One-parameter analysis, ' + param_str)
     plt.legend()
     plt.show()
 
 
 def is_zero(item):
-    return item < 1e-3
+    return item < 5e-4
 
 
 def perform_two_param_analysis(f1, f2, param_dict, variable_params):
@@ -148,7 +152,7 @@ def perform_two_param_analysis(f1, f2, param_dict, variable_params):
     param1_det_diff_func = lambdify(variables[:2], param1_det_diff, 'numpy')
     diff_list = []
     for i in range(len(x_list)):
-        if is_zero(np.abs(param1_det_diff_func(x_list[i], y_list[i]))):
+        if is_zero(10 * np.abs(param1_det_diff_func(x_list[i], y_list[i]))):
             diff_list.append(x_list[i])
 
     x_c = sum(diff_list) / len(diff_list)
@@ -156,17 +160,18 @@ def perform_two_param_analysis(f1, f2, param_dict, variable_params):
     param1_c = param1_det_sol.subs({x: x_c, y: y_c})
     param2_c = param2_sol.subs({x: x_c, y: y_c, variable_params[0]: param1_c})
 
-    plt.plot(param2_trace_list, param1_trace_list, "--", label='Neutrality line')
+    plt.plot(param2_trace_list, param1_trace_list, '--', label='Neutrality line')
     plt.plot(param2_det_list, param1_det_list, label='Multiplicity line')
-    plt.plot(param2_c, param1_c, 'go', label='C')
+    plt.plot(param2_c, param1_c, 'go', label='C root')
 
     if tb_points:
         x_axis, y_axis = np.transpose(tb_points)
-        plt.plot(x_axis, y_axis, 'ro', label='Takens-Bogdanov')
+        plt.plot(x_axis, y_axis, 'ro', label='TB root')
 
     plt.xlabel(f'{variable_params[1]}')
     plt.ylabel(f'{variable_params[0]}')
     plt.ylim(-0.01, 0.02)
+    plt.title('Two-parameter analysis')
     plt.legend()
     plt.show()
 
@@ -178,7 +183,7 @@ def pend(start, t, f1, f2):
 
 
 def plot_auto_oscillations(f1, f2, param_dict):
-    t = np.linspace(0, 8000, 2000)
+    t = np.linspace(0, 8000, 4000)
     start = [0.2, 0.2]
     variables = [x, y]
 
@@ -222,16 +227,17 @@ def plot_phase_portrait(f1, f2, param_dict):
     start_tr1 = [0.1, 0.1]
     solution_tr1 = odeint(pend, start_tr1, t, args=(f1_func, f2_func))
     start_tr2 = [0.5, 0.3]
+    # start_tr2 = [0.3, 0.3]
     solution_tr2 = odeint(pend, start_tr2, t, args=(f1_func, f2_func))
 
     start_osc = [0.2, 0.2]
     solution_osc = odeint(pend, start_osc, t, args=(f1_func, f2_func))
     solution_cycle = odeint(pend, solution_osc[-1], t, args=(f1_func, f2_func))
 
-    plt.figure(figsize=(9, 9))
+    plt.figure(figsize=(9, 6))
     plt.plot(x_array, y_f1_array[0], color='blue')
-    plt.plot(x_array, y_f1_array[1], color='blue', label='$f_1(x,y) = 0$')
-    plt.plot(x_array, y_f2_array, label='$f_2(x,y) = 0$')
+    plt.plot(x_array, y_f1_array[1], color='blue', label='f1(x, y) = 0')
+    plt.plot(x_array, y_f2_array, label='f2(x, y) = 0')
 
     plt.plot(solution_tr1[:, 0], solution_tr1[:, 1], '--',
              solution_tr2[:, 0], solution_tr2[:, 1], '--',
@@ -240,7 +246,7 @@ def plot_phase_portrait(f1, f2, param_dict):
     x_direction = solution_cycle[1:, 0] - solution_cycle[:-1, 0]
     y_direction = solution_cycle[1:, 1] - solution_cycle[:-1, 1]
     plt.quiver(solution_cycle[:-1, 0], solution_cycle[:-1, 1],
-               x_direction, y_direction, scale=1, color='red', label='Cycle')
+               x_direction, y_direction, scale=0.6, color='red', label='Cycle')
 
     plt.xlabel('x')
     plt.ylabel('y')
@@ -251,14 +257,40 @@ def plot_phase_portrait(f1, f2, param_dict):
     plt.show()
 
 
-def main():
-    param_dict = {k_3: 0.002, k_1: 0.01, k1: 0.12, k2: 0.95, k3: 0.0032}
+def get_model():
     z = 1 - x - 2 * y
-    dx_dt = k1 * z - k_1 * x - k3 * x * z + k_3 * y - k2 * x * (z ** 2)
+    param_dict = {k_3: 0.002, k_1: 0.01, k1: 0.12, k2: 0.95, k3: 0.0032}
+    dx_dt = k1 * z - k_1 * x - k3 * x * z + k_3 * y - k2 * z ** 2 * x
     dy_dt = k3 * x * z - k_3 * y
-    param = k1
-    perform_one_param_analysis(dx_dt, dy_dt, param_dict.copy(), param)
+    return dx_dt, dy_dt, param_dict
+
+
+def main():
+    dx_dt, dy_dt, param_dict = get_model()
+    variable_param = k1
+
+    temp_dict = param_dict.copy()
+    updated_param = k_1
+    param_values = [0.001, 0.005, 0.01, 0.015, 0.02]
+    for value in param_values:
+        temp_dict[updated_param] = value
+        perform_one_param_analysis(dx_dt, dy_dt, temp_dict.copy(),
+                                   variable_param, updated_param)
+
+    temp_dict = param_dict.copy()
+    updated_param = k_3
+    param_values = [0.0005, 0.001, 0.002, 0.003, 0.004]
+    for value in param_values:
+        temp_dict[updated_param] = value
+        perform_one_param_analysis(dx_dt, dy_dt, temp_dict.copy(),
+                                   variable_param, updated_param)
+
     perform_two_param_analysis(dx_dt, dy_dt, param_dict.copy(), [k_1, k1])
+
+    param_dict[k_1] = 0.009
+    param_dict[k1] = 0.114
+    plot_auto_oscillations(dx_dt, dy_dt, param_dict.copy())
+    plot_phase_portrait(dx_dt, dy_dt, param_dict.copy())
 
 
 if __name__ == "__main__":
