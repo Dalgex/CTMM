@@ -171,6 +171,86 @@ def perform_two_param_analysis(f1, f2, param_dict, variable_params):
     plt.show()
 
 
+def pend(start, t, f1, f2):
+    f1_subs = f1(start[0], start[1])
+    f2_subs = f2(start[0], start[1])
+    return [f1_subs, f2_subs]
+
+
+def plot_auto_oscillations(f1, f2, param_dict):
+    t = np.linspace(0, 8000, 2000)
+    start = [0.2, 0.2]
+    variables = [x, y]
+
+    f1_subs = f1.subs(get_params(param_dict))
+    f2_subs = f2.subs(get_params(param_dict))
+    f1_func = lambdify(variables, f1_subs, 'numpy')
+    f2_func = lambdify(variables, f2_subs, 'numpy')
+    sol = odeint(pend, start, t, args=(f1_func, f2_func))
+
+    plt.plot(t, sol[:, 0], label='x(t)')
+    plt.plot(t, sol[:, 1], label='y(t)')
+    plt.xlabel('time')
+    plt.ylabel('x, y')
+    plt.title('Auto oscillations')
+    plt.legend()
+    plt.show()
+
+
+def plot_phase_portrait(f1, f2, param_dict):
+    y_f2_sol = solve(f2, y)[0]
+    y_f2_sol = y_f2_sol.subs(get_params(param_dict))
+
+    x_array = np.linspace(0, 1, 1000)
+    y_f2_func = lambdify(x, y_f2_sol, 'numpy')
+    y_f2_array = y_f2_func(x_array)
+    x_array, y_f2_array = np.array(set_variable_values(x_array, y_f2_array))
+
+    y_f1_sol = solve(f1, y)
+    y_f1_sol = [y_f1_sol[0].subs(get_params(param_dict)),
+                y_f1_sol[1].subs(get_params(param_dict))]
+    y_f1_func = lambdify(x, y_f1_sol, 'numpy')
+    y_f1_array = y_f1_func(x_array)
+
+    variables = [x, y]
+    f1_subs = f1.subs(get_params(param_dict))
+    f2_subs = f2.subs(get_params(param_dict))
+    f1_func = lambdify(variables, f1_subs, 'numpy')
+    f2_func = lambdify(variables, f2_subs, 'numpy')
+
+    t = np.linspace(0, 8000, 2000)
+    start_tr1 = [0.1, 0.1]
+    solution_tr1 = odeint(pend, start_tr1, t, args=(f1_func, f2_func))
+    start_tr2 = [0.5, 0.3]
+    solution_tr2 = odeint(pend, start_tr2, t, args=(f1_func, f2_func))
+
+    start_osc = [0.2, 0.2]
+    solution_osc = odeint(pend, start_osc, t, args=(f1_func, f2_func))
+    solution_cycle = odeint(pend, solution_osc[-1], t, args=(f1_func, f2_func))
+
+    plt.figure(figsize=(9, 9))
+    plt.plot(x_array, y_f1_array[0], color='blue')
+    plt.plot(x_array, y_f1_array[1], color='blue', label='$f_1(x,y) = 0$')
+    plt.plot(x_array, y_f2_array, label='$f_2(x,y) = 0$')
+
+    plt.plot(solution_tr1[:, 0], solution_tr1[:, 1], '--',
+             solution_tr2[:, 0], solution_tr2[:, 1], '--',
+             label='Trajectory', alpha=0.5)
+
+    x_direction = solution_cycle[1:, 0] - solution_cycle[:-1, 0]
+    y_direction = solution_cycle[1:, 1] - solution_cycle[:-1, 1]
+    plt.quiver(solution_cycle[:-1, 0], solution_cycle[:-1, 1],
+               x_direction, y_direction, scale=1, color='red', label='Cycle')
+
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.title('Phase portrait')
+    plt.xlim(0.1, 0.65)
+    plt.ylim(0.07, 0.32)
+    plt.legend()
+    plt.show()
+
+
 def main():
     param_dict = {k_3: 0.002, k_1: 0.01, k1: 0.12, k2: 0.95, k3: 0.0032}
     z = 1 - x - 2 * y
