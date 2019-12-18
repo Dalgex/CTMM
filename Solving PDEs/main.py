@@ -59,7 +59,7 @@ def solve_poisson_equation(u_e, alpha, title_name):
 
 def solve_heat_equation(u_e, steps_number, alpha, title_name):
     domain = Circle(Point(0, 0), 1)
-    mesh = generate_mesh(domain, 15)
+    mesh = generate_mesh(domain, 30)
     V = FunctionSpace(mesh, 'P', 2)
 
     u_d = Expression(ccode(u_e), t=0, degree=2)
@@ -80,7 +80,9 @@ def solve_heat_equation(u_e, steps_number, alpha, title_name):
     L = (u_n + dt * f) * v * dx + dt * v * g * ds
     u = Function(V)
     t = 0
-    images = []
+    plots = []
+    errors_L2 = []
+    errors_max = []
 
     for n in range(steps_number):
         t += dt
@@ -93,10 +95,18 @@ def solve_heat_equation(u_e, steps_number, alpha, title_name):
         error_L2 = errornorm(u_e, u, 'L2')
         error_max = np.abs(u_e.vector().get_local() - u.vector().get_local()).max()
         print('t = %.2f: max error = %.3g, L2 error = %.3g' % (t, error_max, error_L2))
-        images.append(plot_solutions(u_e, u, mesh))
+        plots.append(plot_solutions(u_e, u, mesh))
+        errors_max.append(error_max)
+        errors_L2.append(error_L2)
 
-    imageio.imsave(f'heat_{title_name}.png', images[-1])
-    write_video(images, f'heat_{title_name}')
+    imageio.imsave(f'heat_{title_name}.png', plots[-1])
+    write_video(plots, f'heat_{title_name}')
+    time_interval = np.linspace(dt, T, steps_number)
+    plt.plot(time_interval, errors_max, label='Max error')
+    plt.plot(time_interval, errors_L2, label='L2 error')
+    plt.legend()
+    plt.savefig(f'errors_{title_name}.png')
+    plt.close()
 
 
 def write_video(images, title_name, fps=10):
@@ -113,19 +123,21 @@ def plot_solutions(u_e, u, mesh):
     triangulation = tri.Triangulation(mesh_coordinates[:, 0],
                                       mesh_coordinates[:, 1], triangles)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4))
     z_faces = np.asarray([u_e(cell.midpoint()) for cell in cells(mesh)])
-    ax1.tripcolor(triangulation, facecolors=z_faces, edgecolors='k')
+    ax1_plot = ax1.tripcolor(triangulation, facecolors=z_faces, edgecolors='k')
     z_faces = np.asarray([u(cell.midpoint()) for cell in cells(mesh)])
-    ax2.tripcolor(triangulation, facecolors=z_faces, edgecolors='k')
+    ax2_plot = ax2.tripcolor(triangulation, facecolors=z_faces, edgecolors='k')
+    
     ax1.set_title('Real solution')
     ax2.set_title('Approximate solution')
-
+    fig.colorbar(ax1_plot, ax=ax1)
+    fig.colorbar(ax2_plot, ax=ax2)
     fig.canvas.draw()
-    image = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-    image = image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    fig_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+    fig_plot = fig_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
     plt.close()
-    return image
+    return fig_plot
 
 
 def main():
