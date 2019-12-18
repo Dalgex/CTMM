@@ -1,7 +1,9 @@
+import imageio
 import numpy as np
 from fenics import *
 from mshr import Circle, generate_mesh
-from sympy import symbols, diff, sqrt, ccode, sin, cos, tan, exp
+from matplotlib import tri, pyplot as plt
+from sympy import symbols, diff, sqrt, ccode, sin, cos, exp
 
 x, y, t = symbols('x[0], x[1], t')
 
@@ -51,11 +53,13 @@ def solve_poisson_equation(u_e, alpha, title_name):
     vertex_values_u_e = u_e.compute_vertex_values(mesh)
     error_max = np.max(np.abs(vertex_values_u_e - vertex_values_u))
     print('Max error = %.3g, L2 error = %.3g' % (error_max, error_L2))
+    image = plot_solutions(u_e, u, mesh)
+    imageio.imsave(f'poisson_{title_name}.png', image)
 
 
 def solve_heat_equation(u_e, steps_number, alpha, title_name):
     domain = Circle(Point(0, 0), 1)
-    mesh = generate_mesh(domain, 30)
+    mesh = generate_mesh(domain, 15)
     V = FunctionSpace(mesh, 'P', 2)
 
     u_d = Expression(ccode(u_e), t=0, degree=2)
@@ -70,12 +74,13 @@ def solve_heat_equation(u_e, steps_number, alpha, title_name):
     g = calculate_normal_derivative(u_e)
     g = Expression(ccode(g), t=0, degree=2)
 
-    T = 2.0
+    T = 5.0
     dt = T / steps_number
     a = u * v * dx + dt * dot(grad(u), grad(v)) * dx
     L = (u_n + dt * f) * v * dx + dt * v * g * ds
     u = Function(V)
     t = 0
+    images = []
 
     for n in range(steps_number):
         t += dt
@@ -88,6 +93,39 @@ def solve_heat_equation(u_e, steps_number, alpha, title_name):
         error_L2 = errornorm(u_e, u, 'L2')
         error_max = np.abs(u_e.vector().get_local() - u.vector().get_local()).max()
         print('t = %.2f: max error = %.3g, L2 error = %.3g' % (t, error_max, error_L2))
+        images.append(plot_solutions(u_e, u, mesh))
+
+    imageio.imsave(f'heat_{title_name}.png', images[-1])
+    write_video(images, f'heat_{title_name}')
+
+
+def write_video(images, title_name, fps=10):
+    with imageio.get_writer(f'{title_name}.avi', fps=fps) as writer:
+        for image in images:
+            writer.append_data(image)
+
+
+def plot_solutions(u_e, u, mesh):
+    n = mesh.num_vertices()
+    d = mesh.geometry().dim()
+    mesh_coordinates = mesh.coordinates().reshape((n, d))
+    triangles = np.asarray([cell.entities(0) for cell in cells(mesh)])
+    triangulation = tri.Triangulation(mesh_coordinates[:, 0],
+                                      mesh_coordinates[:, 1], triangles)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    z_faces = np.asarray([u_e(cell.midpoint()) for cell in cells(mesh)])
+    ax1.tripcolor(triangulation, facecolors=z_faces, edgecolors='k')
+    z_faces = np.asarray([u(cell.midpoint()) for cell in cells(mesh)])
+    ax2.tripcolor(triangulation, facecolors=z_faces, edgecolors='k')
+    ax1.set_title('Real solution')
+    ax2.set_title('Approximate solution')
+
+    fig.canvas.draw()
+    image = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+    image = image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    plt.close()
+    return image
 
 
 def main():
@@ -95,13 +133,13 @@ def main():
 
     alpha = 1
     solve_poisson_equation(1 - x ** 2 + y, alpha, 'func1')
-    solve_poisson_equation(tan(x) * y + x * cos(y), alpha, 'func2')
-    solve_poisson_equation(x * exp(y) + sin(y ** 2), alpha, 'func3')
+    solve_poisson_equation(sin(x) * y + x * cos(y), alpha, 'func2')
+    solve_poisson_equation(sin(y ** 2) - x * exp(y), alpha, 'func3')
 
     steps_number = 50
-    solve_heat_equation(x * t + y ** 2, steps_number, alpha, 'func1')
-    solve_heat_equation(cos(x) * sin(t) * tan(y), steps_number, alpha, 'func2')
-    solve_heat_equation(exp(x) * t ** 2 - sin(y * t), steps_number, alpha, 'func3')
+    solve_heat_equation(t * (y - x * t), steps_number, alpha, 'func1')
+    solve_heat_equation(x ** 2 * t - cos(y * t), steps_number, alpha, 'func2')
+    solve_heat_equation(x * cos(t ** 2) + t * sin(y), steps_number, alpha, 'func3')
 
 
 if __name__ == '__main__':
