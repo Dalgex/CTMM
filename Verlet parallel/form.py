@@ -6,7 +6,7 @@ from matplotlib.animation import FuncAnimation
 from emitter import Emitter
 from loading import load_data
 from canvas import CanvasPanel
-from gravity_simulation import calculate_system_motion
+from gravity_simulation import calculate_particle_motion
 
 
 class Form(wx.Frame):
@@ -238,7 +238,7 @@ class Form(wx.Frame):
         print(self._emitter)
         delta_t = 10 ** 6 if self._is_solar_mode else 1
         method_name = self._widgets['method'].GetValue()
-        self._emitter.particles = calculate_system_motion(particles, delta_t, method_name)
+        self._emitter.particles = calculate_particle_motion(particles, delta_t, method_name)
 
     def _on_loading_click(self, event):
         self._clear()
