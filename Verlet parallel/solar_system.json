@@ -1,0 +1,85 @@
+{
+  "particles": [
+    {
+      "x_coord": 0,
+      "y_coord": 0,
+      "u_speed": 0,
+      "v_speed": 0,
+      "mass": 1.99e30,
+      "life_time": 1000,
+      "color": [255, 238, 2]
+    },
+    {
+      "x_coord": 58000000000.0,
+      "y_coord": 0,
+      "u_speed": 0,
+      "v_speed": 48000,
+      "mass": 3.3e23,
+      "life_time": 1000,
+      "color": [227, 99, 0]
+    },
+    {
+      "x_coord": 108000000000.0,
+      "y_coord": 0,
+      "u_speed": 0,
+      "v_speed": 35000,
+      "mass": 4.87e24,
+      "life_time": 1000,
+      "color": [139, 92, 0]
+    },
+    {
+      "x_coord": 150000000000.0,
+      "y_coord": 0,
+      "u_speed": 0,
+      "v_speed": 30000,
+      "mass": 5.98e24,
+      "life_time": 1000,
+      "color": [0, 0, 255]
+    },
+    {
+      "x_coord": 228000000000.0,
+      "y_coord": 0,
+      "u_speed": 0,
+      "v_speed": 24000,
+      "mass": 6.42e23,
+      "life_time": 1000,
+      "color": [236, 0, 34]
+    },
+    {
+      "x_coord": 778000000000.0,
+      "y_coord": 0,
+      "u_speed": 0,
+      "v_speed": 13000,
+      "mass": 1.8999999999999998e27,
+      "life_time": 1000,
+      "color": [86, 83, 0]
+    },
+    {
+      "x_coord": 1427000000000.0,
+      "y_coord": 0,
+      "u_speed": 0,
+      "v_speed": 9600,
+      "mass": 5.69e26,
+      "life_time": 1000,
+      "color": [147, 120, 0]
+    },
+    {
+      "x_coord": 2870000000000.0,
+      "y_coord": 0,
+      "u_speed": 0,
+      "v_speed": 6800,
+      "mass": 8.68e25,
+      "life_time": 1000,
+      "color": [0, 147, 197]
+    },
+    {
+      "x_coord": 4497000000000.0,
+      "y_coord": 0,
+      "u_speed": 0,
+      "v_speed": 5400,
+      "mass": 1.0199999999999999e26,
+      "life_time": 1000,
+      "color": [0, 80, 112]
+    }
+  ]
+}
