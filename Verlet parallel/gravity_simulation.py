@@ -1,3 +1,4 @@
+import threading
 import numpy as np
 from copy import deepcopy
 from scipy.integrate import odeint
@@ -109,12 +110,10 @@ def _update_speed(data, prev_accelerations, delta_t, i_start, i_end):
 
 def _convert_object_to_array(particles):
     data = []
-
     for p in particles:
         temp_list = [p.coordinates[0], p.coordinates[1],
                      p.speed[0], p.speed[1], p.radius, p.mass]
         data.append(temp_list)
-
     return np.array(data)
 
 
@@ -125,3 +124,30 @@ def _convert_array_to_object(data, particles):
         particles[i].speed[0] = data[i, 2]
         particles[i].speed[1] = data[i, 3]
     return particles
+
+
+def calculate_verlet_threading(data, delta_t, threads_count=4):
+    block = len(data) // threads_count
+    prev_particles = deepcopy(data)
+    prev_accelerations = np.zeros((len(data), 2))
+    args = [threads_count, block, data, prev_particles, prev_accelerations, delta_t]
+    _update_particles_threading(_update_coordinates, *args)
+    _update_particles_threading(_update_speed, *args)
+    return data
+
+
+def _update_particles_threading(target, threads_count, block, data,
+                                prev_data, prev_accelerations, delta_t):
+    args = [data, prev_data, prev_accelerations, delta_t]
+    if target == _update_speed:
+        del args[1]
+
+    threads = []
+    for i in range(threads_count):
+        i_start = i * block
+        i_end = (i + 1) * block if i < threads_count - 1 else len(data)
+        thread = threading.Thread(target=target, args=(*args, i_start, i_end))
+        threads.append(thread)
+        thread.start()
+    for thread in threads:
+        thread.join()
