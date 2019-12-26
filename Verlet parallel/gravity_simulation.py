@@ -55,14 +55,14 @@ def _run_method(data, max_time, tick_count, method):
 
 def _calculate_acceleration(data, index):
     G = 6.6743015 * (10 ** -11)
-    acceleration = np.array([.0, .0])
+    acc = np.array([.0, .0])
 
     for i in range(len(data)):
         if i != index:
             dist = data[i, :2] - data[index, :2]
             if np.linalg.norm(dist) > data[i, 4] + data[index, 4]:
-                acceleration += G * data[i, 5] * dist / (np.linalg.norm(dist) ** 3)
-    return acceleration
+                acc += G * data[i, 5] * dist / (np.linalg.norm(dist) ** 3)
+    return acc
 
 
 def _calculate_derivatives(initial, t, data, index):
@@ -86,26 +86,24 @@ def calculate_verlet(data, delta_t):
     i_start = 0
     i_end = len(data)
     prev_data = deepcopy(data)
-    prev_accelerations = np.zeros((len(data), 2))
-    _update_coordinates(data, prev_data, prev_accelerations, delta_t, i_start, i_end)
-    _update_speed(data, prev_accelerations, delta_t, i_start, i_end)
+    prev_accs = np.zeros((len(data), 2))
+    _update_coordinates(data, prev_data, prev_accs, delta_t, i_start, i_end)
+    _update_speed(data, prev_accs, delta_t, i_start, i_end)
     return data
 
 
-def _update_coordinates(data, prev_data,
-                        prev_accelerations, delta_t, i_start, i_end):
+def _update_coordinates(data, prev_data, prev_accs, delta_t, i_start, i_end):
     for i in range(i_start, i_end):
         d = data[i]
-        prev_accelerations[i] = _calculate_acceleration(prev_data, i)
-        d[:2] += (d[2:4] * delta_t
-                  + 0.5 * prev_accelerations[i] * delta_t ** 2)
+        prev_accs[i] = _calculate_acceleration(prev_data, i)
+        d[:2] += d[2:4] * delta_t + 0.5 * prev_accs[i] * delta_t ** 2
 
 
-def _update_speed(data, prev_accelerations, delta_t, i_start, i_end):
+def _update_speed(data, prev_accs, delta_t, i_start, i_end):
     for i in range(i_start, i_end):
         d = data[i]
-        cur_acceleration = _calculate_acceleration(data, i)
-        d[2:4] += 0.5 * (prev_accelerations[i] + cur_acceleration) * delta_t
+        cur_acc = _calculate_acceleration(data, i)
+        d[2:4] += 0.5 * (prev_accs[i] + cur_acc) * delta_t
 
 
 def _convert_object_to_array(particles):
@@ -129,16 +127,16 @@ def _convert_array_to_object(data, particles):
 def calculate_verlet_threading(data, delta_t, threads_count=4):
     block = len(data) // threads_count
     prev_particles = deepcopy(data)
-    prev_accelerations = np.zeros((len(data), 2))
-    args = [threads_count, block, data, prev_particles, prev_accelerations, delta_t]
+    prev_accs = np.zeros((len(data), 2))
+    args = [threads_count, block, data, prev_particles, prev_accs, delta_t]
     _update_particles_threading(_update_coordinates, *args)
     _update_particles_threading(_update_speed, *args)
     return data
 
 
-def _update_particles_threading(target, threads_count, block, data,
-                                prev_data, prev_accelerations, delta_t):
-    args = [data, prev_data, prev_accelerations, delta_t]
+def _update_particles_threading(target, threads_count, block,
+                                data, prev_data, prev_accs, delta_t):
+    args = [data, prev_data, prev_accs, delta_t]
     if target == _update_speed:
         del args[1]
 
