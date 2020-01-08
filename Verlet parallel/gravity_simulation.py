@@ -3,12 +3,13 @@ import numpy as np
 from copy import deepcopy
 from scipy.integrate import odeint
 
+NODES = 6
+
 
 def calculate_system_motion(particles, max_time, tick_count, method_name):
     data = _convert_object_to_array(particles)
     method = _select_method(method_name)
-    result = _run_method(data, max_time, tick_count, method)
-    return result
+    return method(data, max_time, tick_count)
 
 
 def calculate_particle_motion(particles, delta_t, method_name):
@@ -25,18 +26,24 @@ def calculate_particle_motion(particles, delta_t, method_name):
         return particles
 
     particles = [p for p in particles if p.life_time > 0]
+    if not particles:
+        return []
     for p in particles:
         p.life_time -= 1
 
     data = _convert_object_to_array(particles)
     method = _select_method(method_name)
-    result = method(data, delta_t)
+    tick_count = 2
+    max_time = tick_count * delta_t
+    result = method(data, max_time, tick_count)[1]
     return _convert_array_to_object(result, particles)
 
 
 def _select_method(method_name):
-    if method_name == 'Verlet':
+    if method_name == 'verlet':
         method = calculate_verlet
+    elif method_name == 'verlet-threading':
+        method = calculate_verlet_threading
     else:
         method = calculate_odeint
     return method
@@ -44,66 +51,80 @@ def _select_method(method_name):
 
 def _run_method(data, max_time, tick_count, method):
     delta_t = max_time / tick_count
-    result = np.zeros((tick_count, len(data), len(data[0])))
-    result[0] = deepcopy(data)
+    shape = (tick_count, len(data), len(data[0]))
+    size = shape[1] * shape[2]
+    data = data.ravel()
+    result = np.zeros((shape[0] * shape[1] * shape[2]))
+    result[:size] = deepcopy(data)
 
     for i in range(1, tick_count):
-        method(data, delta_t)
-        result[i] = deepcopy(data)
-    return result
+        method(data, delta_t, shape[1])
+        result[i * size: (i + 1) * size] = deepcopy(data)
+    return result.reshape(shape)
 
 
-def _calculate_acceleration(data, index):
+def _calculate_acceleration(data, index, N):
     G = 6.6743015 * (10 ** -11)
     acc = np.array([.0, .0])
 
-    for i in range(len(data)):
+    for i in range(N):
         if i != index:
-            dist = data[i, :2] - data[index, :2]
-            if np.linalg.norm(dist) > data[i, 4] + data[index, 4]:
-                acc += G * data[i, 5] * dist / (np.linalg.norm(dist) ** 3)
+            dist_x = data[i * NODES] - data[index * NODES]
+            dist_y = data[i * NODES + 1] - data[index * NODES + 1]
+            dist = np.array([dist_x, dist_y])
+            # if np.linalg.norm(dist) > data[i * NODES + 4] + data[index * NODES + 4]:
+            acc += G * data[i * NODES + 5] * dist / (np.linalg.norm(dist) ** 3)
     return acc
 
 
-def _calculate_derivatives(initial, t, data, index):
+def _calculate_derivatives(initial, t, data, index, N):
     x_coord, y_coord, u_speed, v_speed = initial
-    data[index, :2] = [x_coord, y_coord]
-    acc_x, acc_y = _calculate_acceleration(data, index)
+    data[index * NODES: index * NODES + 2] = [x_coord, y_coord]
+    acc_x, acc_y = _calculate_acceleration(data, index, N)
     return [u_speed, v_speed, acc_x, acc_y]
 
 
-def calculate_odeint(data, delta_t):
-    for i in range(len(data)):
-        y_init = data[i, :4]
+def calculate_odeint(data, max_time, tick_count):
+    return _run_method(data, max_time, tick_count, _run_odeint)
+
+
+def _run_odeint(data, delta_t, N):
+    for i in range(N):
+        y_init = data[i * NODES: i * NODES + 4]
         solution = odeint(func=_calculate_derivatives, y0=y_init,
-                          t=np.linspace(0, delta_t, 2), args=(data, i))
+                          t=np.linspace(0, delta_t, 2), args=(data, i, N))
         x_coord, y_coord, u_speed, v_speed = solution[-1]
-        data[i, :4] = [x_coord, y_coord, u_speed, v_speed]
+        data[i * NODES: i * NODES + 4] = [x_coord, y_coord, u_speed, v_speed]
     return data
 
 
-def calculate_verlet(data, delta_t):
+def calculate_verlet(data, max_time, tick_count):
+    return _run_method(data, max_time, tick_count, _run_verlet)
+
+
+def _run_verlet(data, delta_t, N):
     i_start = 0
-    i_end = len(data)
+    i_end = N
     prev_data = deepcopy(data)
-    prev_accs = np.zeros((len(data), 2))
-    _update_coordinates(data, prev_data, prev_accs, delta_t, i_start, i_end)
-    _update_speed(data, prev_accs, delta_t, i_start, i_end)
+    prev_accs = np.zeros((N, 2))
+    _update_coordinates(data, prev_data, prev_accs, delta_t, i_start, i_end, N)
+    _update_speed(data, prev_accs, delta_t, i_start, i_end, N)
     return data
 
 
-def _update_coordinates(data, prev_data, prev_accs, delta_t, i_start, i_end):
+def _update_coordinates(data, prev_data, prev_accs, delta_t, i_start, i_end, N):
     for i in range(i_start, i_end):
-        d = data[i]
-        prev_accs[i] = _calculate_acceleration(prev_data, i)
-        d[:2] += d[2:4] * delta_t + 0.5 * prev_accs[i] * delta_t ** 2
+        prev_accs[i] = _calculate_acceleration(prev_data, i, N)
+        for k in range(2):
+            data[i * NODES + k] += data[i * NODES + k + 2] * delta_t \
+                                   + 0.5 * prev_accs[i][k] * delta_t ** 2
 
 
-def _update_speed(data, prev_accs, delta_t, i_start, i_end):
+def _update_speed(data, prev_accs, delta_t, i_start, i_end, N):
     for i in range(i_start, i_end):
-        d = data[i]
-        cur_acc = _calculate_acceleration(data, i)
-        d[2:4] += 0.5 * (prev_accs[i] + cur_acc) * delta_t
+        cur_acc = _calculate_acceleration(data, i, N)
+        for k in range(2):
+            data[i * NODES + k + 2] += 0.5 * (prev_accs[i][k] + cur_acc[k]) * delta_t
 
 
 def _convert_object_to_array(particles):
@@ -124,28 +145,41 @@ def _convert_array_to_object(data, particles):
     return particles
 
 
-def calculate_verlet_threading(data, delta_t, threads_count=4):
+def calculate_verlet_threading(data, max_time, tick_count, threads_count=4):
     block = len(data) // threads_count
-    prev_particles = deepcopy(data)
-    prev_accs = np.zeros((len(data), 2))
-    args = [threads_count, block, data, prev_particles, prev_accs, delta_t]
-    _update_particles_threading(_update_coordinates, *args)
-    _update_particles_threading(_update_speed, *args)
-    return data
-
-
-def _update_particles_threading(target, threads_count, block,
-                                data, prev_data, prev_accs, delta_t):
-    args = [data, prev_data, prev_accs, delta_t]
-    if target == _update_speed:
-        del args[1]
+    shape = (tick_count, len(data), len(data[0]))
+    size = shape[1] * shape[2]
+    data = data.ravel()
+    result = np.zeros((shape[0] * size))
+    result[:size] = deepcopy(data)
+    barrier = threading.Barrier(threads_count)
 
     threads = []
     for i in range(threads_count):
         i_start = i * block
-        i_end = (i + 1) * block if i < threads_count - 1 else len(data)
-        thread = threading.Thread(target=target, args=(*args, i_start, i_end))
+        i_end = (i + 1) * block if i < threads_count - 1 else shape[1]
+        args = [data, max_time, tick_count, result,
+                barrier, i_start, i_end, size, shape[1]]
+        thread = threading.Thread(target=_run_threading, args=(*args,))
         threads.append(thread)
         thread.start()
+
     for thread in threads:
         thread.join()
+    return result.reshape(shape)
+
+
+def _run_threading(data, max_time, tick_count, result, barrier, i_start, i_end, size, N):
+    delta_t = max_time / tick_count
+    for i in range(1, tick_count):
+        _update_particles_threading(data, delta_t, barrier, i_start, i_end, N)
+        result[i * size: (i + 1) * size] = deepcopy(data)
+
+
+def _update_particles_threading(data, delta_t, barrier, i_start, i_end, N):
+    prev_data = deepcopy(data)
+    prev_accs = np.zeros((len(data), 2))
+    barrier.wait()
+    _update_coordinates(data, prev_data, prev_accs, delta_t, i_start, i_end, N)
+    barrier.wait()
+    _update_speed(data, prev_accs, delta_t, i_start, i_end, N)
