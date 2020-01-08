@@ -238,7 +238,7 @@ class Form(wx.Frame):
         print(self._emitter)
         delta_t = 10 ** 6 if self._is_solar_mode else 1
         method_name = self._widgets['method'].GetValue()
-        self._emitter.particles = calculate_particle_motion(particles, delta_t, method_name)
+        self._emitter.particles = calculate_particle_motion(method_name, particles, delta_t)
 
     def _on_loading_click(self, event):
         self._clear()
