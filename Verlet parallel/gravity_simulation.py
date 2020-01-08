@@ -8,13 +8,13 @@ from verlet_cython import calculate_verlet_cython
 NODES = 6
 
 
-def calculate_system_motion(particles, max_time, tick_count, method_name):
+def calculate_system_motion(method_name, particles, max_time, tick_count):
     data = _convert_object_to_array(particles)
     method = _select_method(method_name)
     return method(data, max_time, tick_count)
 
 
-def calculate_particle_motion(particles, delta_t, method_name):
+def calculate_particle_motion(method_name, particles, delta_t):
     if not particles:
         return []
 
@@ -55,7 +55,7 @@ def _select_method(method_name):
     return method
 
 
-def _run_method(data, max_time, tick_count, method):
+def _run_method(method, data, max_time, tick_count):
     delta_t = max_time / tick_count
     shape = (tick_count, len(data), len(data[0]))
     size = shape[1] * shape[2]
@@ -91,7 +91,7 @@ def _calculate_derivatives(initial, t, data, index, N):
 
 
 def calculate_odeint(data, max_time, tick_count):
-    return _run_method(data, max_time, tick_count, _run_odeint)
+    return _run_method(_run_odeint, data, max_time, tick_count)
 
 
 def _run_odeint(data, delta_t, N):
@@ -105,7 +105,7 @@ def _run_odeint(data, delta_t, N):
 
 
 def calculate_verlet(data, max_time, tick_count):
-    return _run_method(data, max_time, tick_count, _run_verlet)
+    return _run_method(_run_verlet, data, max_time, tick_count)
 
 
 def _run_verlet(data, delta_t, N):
@@ -175,7 +175,8 @@ def calculate_verlet_threading(data, max_time, tick_count, threads_count=4):
     return result.reshape(shape)
 
 
-def _run_threading(data, max_time, tick_count, result, barrier, i_start, i_end, size, N):
+def _run_threading(data, max_time, tick_count, result,
+                   barrier, i_start, i_end, size, N):
     delta_t = max_time / tick_count
     for i in range(1, tick_count):
         _update_particles_threading(data, delta_t, barrier, i_start, i_end, N)
