@@ -55,20 +55,6 @@ def _select_method(method_name):
     return method
 
 
-def _run_method(method, data, max_time, tick_count):
-    delta_t = max_time / tick_count
-    shape = (tick_count, len(data), len(data[0]))
-    size = shape[1] * shape[2]
-    data = data.ravel()
-    result = np.zeros((shape[0] * shape[1] * shape[2]))
-    result[:size] = deepcopy(data)
-
-    for i in range(1, tick_count):
-        method(data, delta_t, shape[1])
-        result[i * size: (i + 1) * size] = deepcopy(data)
-    return result.reshape(shape)
-
-
 def _calculate_acceleration(data, index, N):
     G = 6.6743015 * (10 ** -11)
     acc = np.array([.0, .0])
@@ -83,29 +69,36 @@ def _calculate_acceleration(data, index, N):
     return acc
 
 
-def _calculate_derivatives(initial, t, data, index, N):
-    x_coord, y_coord, u_speed, v_speed = initial
-    data[index * NODES: index * NODES + 2] = [x_coord, y_coord]
-    acc_x, acc_y = _calculate_acceleration(data, index, N)
-    return [u_speed, v_speed, acc_x, acc_y]
-
-
 def calculate_odeint(data, max_time, tick_count):
-    return _run_method(_run_odeint, data, max_time, tick_count)
+    shape = (tick_count, len(data), len(data[0]))
+    data = data.ravel()
+    init = deepcopy(data)
+    delta_t = max_time / tick_count
+    time_span = np.linspace(delta_t, max_time, tick_count)
+    result = odeint(_calculate_derivatives, init, time_span, args=(shape[1],))
+    return result.reshape(shape)
 
 
-def _run_odeint(data, delta_t, N):
+def _calculate_derivatives(data, time_span, N):
+    result = np.zeros(N * NODES)
     for i in range(N):
-        y_init = data[i * NODES: i * NODES + 4]
-        solution = odeint(func=_calculate_derivatives, y0=y_init,
-                          t=np.linspace(0, delta_t, 2), args=(data, i, N))
-        x_coord, y_coord, u_speed, v_speed = solution[-1]
-        data[i * NODES: i * NODES + 4] = [x_coord, y_coord, u_speed, v_speed]
-    return data
+        result[NODES * i: NODES * i + 2] = data[NODES * i + 2: NODES * i + 4]
+        result[NODES * i + 2: NODES * i + 4] = _calculate_acceleration(data, i, N)
+    return result
 
 
 def calculate_verlet(data, max_time, tick_count):
-    return _run_method(_run_verlet, data, max_time, tick_count)
+    delta_t = max_time / tick_count
+    shape = (tick_count, len(data), len(data[0]))
+    size = shape[1] * shape[2]
+    data = data.ravel()
+    result = np.zeros((shape[0] * shape[1] * shape[2]))
+    result[:size] = deepcopy(data)
+
+    for i in range(1, tick_count):
+        _run_verlet(data, delta_t, shape[1])
+        result[i * size: (i + 1) * size] = deepcopy(data)
+    return result.reshape(shape)
 
 
 def _run_verlet(data, delta_t, N):
@@ -245,7 +238,8 @@ def _exchange_data_multiprocessing(data, shared_data, barrier, queue,
     queue.put([i_start * NODES, i_end * NODES,
                data[i_start * NODES: i_end * NODES]])
     barrier.wait()
-    if mp.current_process().name[-1] == '1':
+
+    if i_start == 0:
         for i in range(processes_count):
             temp = queue.get()
             shared_data[temp[0]: temp[1]] = temp[2]
