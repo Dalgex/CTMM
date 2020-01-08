@@ -1,7 +1,9 @@
 import threading
 import numpy as np
 from copy import deepcopy
+import multiprocessing as mp
 from scipy.integrate import odeint
+from verlet_cython import calculate_verlet_cython
 
 NODES = 6
 
@@ -44,6 +46,10 @@ def _select_method(method_name):
         method = calculate_verlet
     elif method_name == 'verlet-threading':
         method = calculate_verlet_threading
+    elif method_name == 'verlet-multiprocessing':
+        method = calculate_verlet_multiprocessing
+    elif method_name == 'verlet-cython':
+        method = calculate_verlet_cython
     else:
         method = calculate_odeint
     return method
@@ -183,3 +189,64 @@ def _update_particles_threading(data, delta_t, barrier, i_start, i_end, N):
     _update_coordinates(data, prev_data, prev_accs, delta_t, i_start, i_end, N)
     barrier.wait()
     _update_speed(data, prev_accs, delta_t, i_start, i_end, N)
+
+
+def calculate_verlet_multiprocessing(data, max_time, tick_count):
+    processes_count = mp.cpu_count()
+    block = len(data) // processes_count
+    shape = (tick_count, len(data), len(data[0]))
+    size = shape[1] * shape[2]
+    data = data.ravel()
+    shared_data = mp.Array('d', np.zeros(size))
+    result = mp.Array('d', np.zeros(shape[0] * size))
+    result[:size] = deepcopy(data)
+    barrier = mp.Barrier(processes_count)
+    queue = mp.Queue()
+
+    processes = []
+    for i in range(processes_count):
+        i_start = i * block
+        i_end = (i + 1) * block if i < processes_count - 1 else shape[1]
+        args = [data, max_time, tick_count, result, shared_data, barrier,
+                queue, processes_count, i_start, i_end, size, shape[1]]
+        process = mp.Process(target=_run_multiprocessing, args=(*args,))
+        processes.append(process)
+        process.start()
+
+    for process in processes:
+        process.join()
+    return np.frombuffer(result.get_obj()).reshape(shape)
+
+
+def _run_multiprocessing(data, max_time, tick_count, result, shared_data,
+                         barrier, queue, processes_count, i_start, i_end, size, N):
+    delta_t = max_time / tick_count
+    for i in range(1, tick_count):
+        _update_particles_multiprocessing(data, delta_t, shared_data, barrier,
+                                          queue, processes_count, i_start, i_end, N)
+        result[i * size: (i + 1) * size] = deepcopy(data)
+
+
+def _update_particles_multiprocessing(data, delta_t, shared_data, barrier,
+                                      queue, processes_count, i_start, i_end, N):
+    prev_data = deepcopy(data)
+    prev_accs = np.zeros((N, 2))
+    _update_coordinates(data, prev_data, prev_accs, delta_t, i_start, i_end, N)
+    _exchange_data_multiprocessing(data, shared_data, barrier, queue,
+                                   processes_count, i_start, i_end)
+    _update_speed(data, prev_accs, delta_t, i_start, i_end, N)
+    _exchange_data_multiprocessing(data, shared_data, barrier, queue,
+                                   processes_count, i_start, i_end)
+
+
+def _exchange_data_multiprocessing(data, shared_data, barrier, queue,
+                                   processes_count, i_start, i_end):
+    queue.put([i_start * NODES, i_end * NODES,
+               data[i_start * NODES: i_end * NODES]])
+    barrier.wait()
+    if mp.current_process().name[-1] == '1':
+        for i in range(processes_count):
+            temp = queue.get()
+            shared_data[temp[0]: temp[1]] = temp[2]
+    barrier.wait()
+    data[:] = np.frombuffer(shared_data.get_obj())
