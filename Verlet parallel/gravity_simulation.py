@@ -44,15 +44,15 @@ def calculate_particle_motion(method_name, particles, delta_t):
 
 
 def _select_method(method_name):
-    if method_name == 'verlet':
+    if 'sequential' in method_name:
         method = calculate_verlet
-    elif method_name == 'verlet-threading':
+    elif 'threading' in method_name:
         method = calculate_verlet_threading
-    elif method_name == 'verlet-multiprocessing':
+    elif 'multiprocessing' in method_name:
         method = calculate_verlet_multiprocessing
-    elif method_name == 'verlet-cython':
+    elif 'cython' in method_name:
         method = calculate_verlet_cython
-    elif method_name == 'verlet-opencl':
+    elif 'opencl' in method_name:
         method = calculate_verlet_opencl
     else:
         method = calculate_odeint

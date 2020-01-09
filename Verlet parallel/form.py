@@ -129,7 +129,8 @@ class Form(wx.Frame):
     def _init_method_block(self):
         static_box = wx.StaticBox(self._panel, label="Method")
         box_sizer = wx.StaticBoxSizer(static_box, wx.VERTICAL)
-        methods = ['Odeint', 'Verlet']
+        methods = ['Odeint', 'Verlet sequential', 'Verlet threading',
+                   'Verlet multiprocessing', 'Verlet cython', 'Verlet opencl']
         combo_box = wx.ComboBox(self._panel, choices=methods, value=methods[0], style=wx.CB_READONLY)
         self._widgets['method'] = combo_box
 
