@@ -65,11 +65,9 @@ def _calculate_acceleration(data, index, N):
 
     for i in range(N):
         if i != index:
-            dist_x = data[i * NODES] - data[index * NODES]
-            dist_y = data[i * NODES + 1] - data[index * NODES + 1]
-            dist = np.array([dist_x, dist_y])
-            # if np.linalg.norm(dist) > data[i * NODES + 4] + data[index * NODES + 4]:
-            acc += G * data[i * NODES + 5] * dist / (np.linalg.norm(dist) ** 3)
+            dist = data[NODES * i: NODES * i + 2] - data[NODES * index: NODES * index + 2]
+            # if np.linalg.norm(dist) > data[NODES * i + 4] + data[NODES * index + 4]:
+            acc += G * data[NODES * i + 5] * dist / (np.linalg.norm(dist) ** 3)
     return acc
 
 
@@ -118,16 +116,14 @@ def _run_verlet(data, delta_t, N):
 def _update_coordinates(data, prev_data, prev_accs, delta_t, i_start, i_end, N):
     for i in range(i_start, i_end):
         prev_accs[i] = _calculate_acceleration(prev_data, i, N)
-        for k in range(2):
-            data[i * NODES + k] += data[i * NODES + k + 2] * delta_t \
-                                   + 0.5 * prev_accs[i][k] * delta_t ** 2
+        data[NODES * i: NODES * i + 2] += data[NODES * i + 2: NODES * i + 4] * delta_t \
+                                          + 0.5 * prev_accs[i] * delta_t ** 2
 
 
 def _update_speed(data, prev_accs, delta_t, i_start, i_end, N):
     for i in range(i_start, i_end):
         cur_acc = _calculate_acceleration(data, i, N)
-        for k in range(2):
-            data[i * NODES + k + 2] += 0.5 * (prev_accs[i][k] + cur_acc[k]) * delta_t
+        data[NODES * i + 2: NODES * i + 4] += 0.5 * (prev_accs[i] + cur_acc) * delta_t
 
 
 def _convert_object_to_array(particles):
@@ -239,8 +235,8 @@ def _update_particles_multiprocessing(data, delta_t, shared_data, barrier,
 
 def _exchange_data_multiprocessing(data, shared_data, barrier, queue,
                                    processes_count, i_start, i_end):
-    queue.put([i_start * NODES, i_end * NODES,
-               data[i_start * NODES: i_end * NODES]])
+    queue.put([NODES * i_start, NODES * i_end,
+               data[NODES * i_start: NODES * i_end]])
     barrier.wait()
 
     if i_start == 0:
