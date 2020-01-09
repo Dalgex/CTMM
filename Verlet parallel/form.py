@@ -199,7 +199,7 @@ class Form(wx.Frame):
         self._is_solar_mode = False
         widget = self._widgets['random_generation']
         value = widget.GetValue()
-        self._emitter.generate_particles(value)
+        self._emitter.generate_particles_gui(value)
         self._max_coord = self._emitter.max_coord
         self._is_calculated = True
 
