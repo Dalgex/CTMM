@@ -31,10 +31,10 @@ class Emitter:
         particle_colors = []
 
         for i in range(number):
-            coordinates = randint(1, 100, 2)
+            coordinates = uniform(1, 100, 2)
             direction = uniform(-3, 3, 2)
             speed = uniform(1, 3, 2)
-            mass = randint(1, 100)
+            mass = uniform(1, 100)
             color = random(3) * 255
             life_time = randint(10, 50)
             self.change_properties(coordinates, direction)
