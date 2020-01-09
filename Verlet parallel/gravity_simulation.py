@@ -1,6 +1,8 @@
 import threading
 import numpy as np
+import pyopencl as cl
 from copy import deepcopy
+from pyopencl import cltypes
 import multiprocessing as mp
 from scipy.integrate import odeint
 from verlet_cython import calculate_verlet_cython
@@ -50,6 +52,8 @@ def _select_method(method_name):
         method = calculate_verlet_multiprocessing
     elif method_name == 'verlet-cython':
         method = calculate_verlet_cython
+    elif method_name == 'verlet-opencl':
+        method = calculate_verlet_opencl
     else:
         method = calculate_odeint
     return method
@@ -245,3 +249,126 @@ def _exchange_data_multiprocessing(data, shared_data, barrier, queue,
             shared_data[temp[0]: temp[1]] = temp[2]
     barrier.wait()
     data[:] = np.frombuffer(shared_data.get_obj())
+
+
+def calculate_verlet_opencl(data, max_time, tick_count):
+    N = np.array(len(data))
+    M = np.array(tick_count)
+    nodes = np.array(NODES)
+    delta_t = max_time / tick_count
+    delta_t = np.array(delta_t)
+
+    platform = cl.get_platforms()
+    devices = platform[0].get_devices(device_type=cl.device_type.CPU)
+    ctx = cl.Context(devices=devices)
+    queue = cl.CommandQueue(ctx)
+
+    prev_data = np.array(data, dtype=cltypes.double)
+    cur_data = deepcopy(prev_data)
+    result = np.zeros((M, N, NODES), dtype=cltypes.double)
+    prev_accs = np.zeros((N, 2), dtype=cltypes.double)
+    cur_accs = np.zeros((N, 2), dtype=cltypes.double)
+
+    mf = cl.mem_flags
+    M_buff = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=M)
+    N_buff = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=N)
+    nodes_buff = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=nodes)
+    delta_t_buff = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=delta_t)
+    prev_data_buff = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=prev_data)
+    cur_data_buff = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=cur_data)
+    prev_accs_buff = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=prev_accs)
+    cur_accs_buff = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=cur_accs)
+    result_buff = cl.Buffer(ctx, mf.WRITE_ONLY, result.nbytes)
+
+    source = """
+             #pragma OPENCL EXTENSION cl_khr_fp64 : enable
+
+             double calculate_norm(__global double *data, int nodes, int i, int j)
+             {
+                 double temp = 0;
+                 for (int k = 0; k < 2; ++k)
+                     temp += pow((data[nodes * i + k] - data[nodes * j + k]), 2);
+                 return sqrt(temp);
+             }
+
+             void calculate_acceleration(__global double *data, __global double *accs,
+                                         int N, int nodes, int index)
+             {
+                 double G = 6.6743015 * pow(10.0, -11);
+
+                 for (int k = 0; k < 2; ++k)
+                     accs[2 * index + k] = 0;
+
+                 for (int i = 0; i < N; ++i)
+                     if (i != index)
+                         for (int k = 0; k < 2; ++k)
+                             accs[2 * index + k] += (G * data[nodes * i + 5]
+                                                     * (data[nodes * i + k] - data[nodes * index + k])
+                                                     / pow(calculate_norm(data, nodes, i, index), 3));
+             }
+
+             void update_coordinates(__global double *prev_data, __global double *cur_data,
+                                     __global double *accs, double delta_t, int N, int nodes)
+             {
+                 for (int j = 0; j < N; ++j)
+                     for (int k = 0; k < 2; ++k)
+                         cur_data[nodes * j + k] = (prev_data[nodes * j + k]
+                                                    + prev_data[nodes * j + k + 2] * delta_t
+                                                    + 0.5 * accs[2 * j + k] * pow(delta_t, 2));
+             }
+
+             void update_speed(__global double *prev_data, __global double *cur_data,
+                               __global double *prev_accs, __global double *cur_accs,
+                               double delta_t, int N, int nodes)
+             {
+                 for (int j = 0; j < N; ++j)
+                     for (int k = 0; k < 2; ++k)
+                         cur_data[nodes * j + k + 2] = (prev_data[nodes * j + k + 2]
+                                                        + 0.5 * (prev_accs[2 * j + k]
+                                                                 + cur_accs[2 * j + k]) * delta_t);
+             }
+
+             __kernel void verlet_opencl(__global double *prev_data, __global double *cur_data,
+                                         __global double *prev_accs, __global double *cur_accs,
+                                         __global double *result, __global double *delta_t_buff,
+                                         __global int *M_buff, __global int *N_buff, __global int *nodes_buff)
+             {
+                 int M = *M_buff;
+                 int N = *N_buff;
+                 int nodes = *nodes_buff;
+                 double delta_t = *delta_t_buff;
+
+                 for (int j = 0; j < N; ++j)
+                     for (int k = 0; k < 4; ++k)
+                         result[nodes * j + k] = prev_data[nodes * j + k];
+
+                 for (int i = 1; i < M; ++i)
+                 {
+                     for (int j = 0; j < N; ++j)
+                         calculate_acceleration(prev_data, prev_accs, N, nodes, j);
+
+                     update_coordinates(prev_data, cur_data, prev_accs, delta_t, N, nodes);
+
+                     for (int j = 0; j < N; ++j)
+                         calculate_acceleration(cur_data, cur_accs, N, nodes, j);
+
+                     update_speed(prev_data, cur_data, prev_accs, cur_accs, delta_t, N, nodes);
+
+                     for (int j = 0; j < N; ++j)
+                         for (int k = 0; k < 2; ++k)
+                         {
+                             prev_data[nodes * j + k] = cur_data[nodes * j + k];
+                             prev_data[nodes * j + k + 2] = cur_data[nodes * j + k + 2];
+                             prev_accs[2 * j + k] = cur_accs[2 * j + k];
+                             result[nodes * (N * i + j) + k] = cur_data[nodes * j + k];
+                             result[nodes * (N * i + j) + k + 2] = cur_data[nodes * j + k + 2];
+                         }
+                 }
+             }"""
+
+    program = cl.Program(ctx, source)
+    program.build()
+    program.verlet_opencl(queue, (1,), None, prev_data_buff, cur_data_buff, prev_accs_buff,
+                          cur_accs_buff, result_buff, delta_t_buff, M_buff, N_buff, nodes_buff)
+    cl.enqueue_copy(queue, result, result_buff).wait()
+    return result
