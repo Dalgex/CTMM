@@ -296,32 +296,43 @@ def calculate_verlet_opencl(data, max_time, tick_count):
                      accs[2 * index + k] = 0;
 
                  for (int i = 0; i < N; ++i)
+                 {
                      if (i != index)
+                     {
                          for (int k = 0; k < 2; ++k)
-                             accs[2 * index + k] += (G * data[nodes * i + 5]
-                                                     * (data[nodes * i + k] - data[nodes * index + k])
-                                                     / pow(calculate_norm(data, nodes, i, index), 3));
+                         {
+                             double dist = data[nodes * i + k] - data[nodes * index + k];
+                             double norm = calculate_norm(data, nodes, i, index);
+                             accs[2 * index + k] += G * data[nodes * i + 5] * dist / pow(norm, 3);
+                         }
+                     }
+                 }
              }
 
              void update_coordinates(__global double *prev_data, __global double *cur_data,
                                      __global double *accs, double delta_t, int N, int nodes)
              {
                  for (int j = 0; j < N; ++j)
+                 {
                      for (int k = 0; k < 2; ++k)
-                         cur_data[nodes * j + k] = (prev_data[nodes * j + k]
-                                                    + prev_data[nodes * j + k + 2] * delta_t
-                                                    + 0.5 * accs[2 * j + k] * pow(delta_t, 2));
+                     {
+                         cur_data[nodes * j + k] += prev_data[nodes * j + k + 2] * delta_t
+                                                    + 0.5 * accs[2 * j + k] * pow(delta_t, 2);
+                     }
+                 }
              }
 
-             void update_speed(__global double *prev_data, __global double *cur_data,
-                               __global double *prev_accs, __global double *cur_accs,
-                               double delta_t, int N, int nodes)
+             void update_speed(__global double *cur_data, __global double *prev_accs,
+                               __global double *cur_accs, double delta_t, int N, int nodes)
              {
                  for (int j = 0; j < N; ++j)
+                 {
                      for (int k = 0; k < 2; ++k)
-                         cur_data[nodes * j + k + 2] = (prev_data[nodes * j + k + 2]
-                                                        + 0.5 * (prev_accs[2 * j + k]
-                                                                 + cur_accs[2 * j + k]) * delta_t);
+                     {
+                         double accs_sum = prev_accs[2 * j + k] + cur_accs[2 * j + k]; 
+                         cur_data[nodes * j + k + 2] += 0.5 * accs_sum * delta_t;
+                     }
+                 }
              }
 
              __kernel void verlet_opencl(__global double *prev_data, __global double *cur_data,
@@ -348,9 +359,10 @@ def calculate_verlet_opencl(data, max_time, tick_count):
                      for (int j = 0; j < N; ++j)
                          calculate_acceleration(cur_data, cur_accs, N, nodes, j);
 
-                     update_speed(prev_data, cur_data, prev_accs, cur_accs, delta_t, N, nodes);
+                     update_speed(cur_data, prev_accs, cur_accs, delta_t, N, nodes);
 
                      for (int j = 0; j < N; ++j)
+                     {
                          for (int k = 0; k < 2; ++k)
                          {
                              prev_data[nodes * j + k] = cur_data[nodes * j + k];
@@ -359,6 +371,7 @@ def calculate_verlet_opencl(data, max_time, tick_count):
                              result[nodes * (N * i + j) + k] = cur_data[nodes * j + k];
                              result[nodes * (N * i + j) + k + 2] = cur_data[nodes * j + k + 2];
                          }
+                     }
                  }
              }"""
 
